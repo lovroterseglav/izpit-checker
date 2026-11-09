@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Uporabniki{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><p class="eyebrow">Konfiguracija obvestil</p><h1>Uporabniki</h1><p>Upravljajte prejemnike in njihove filtre za proste termine.</p></div>
+  <a class="button primary" href="{{ url_for('user_new') }}">+ Dodaj uporabnika</a>
+</section>
+<section class="user-grid" aria-label="Seznam uporabnikov">
+  {% for user in users %}
+  <article class="user-card">
+    <div class="card-head">
+      <div class="avatar" aria-hidden="true">{{ user.name[:1]|upper }}</div>
+      <div><h2>{{ user.name }}</h2><p>{{ user.email_to|join(', ') }}</p></div>
+    </div>
+    <dl class="details">
+      <div><dt>Obdobje</dt><dd>{{ user.date_from.isoformat() if user.date_from else 'danes' }} – {{ user.date_to.isoformat() }}</dd></div>
+      <div><dt>Kraji</dt><dd>{{ user.cities|join(', ') if user.cities else 'Vsi kraji' }}</dd></div>
+      <div><dt>Kategorije</dt><dd>{{ user.categories|join(', ') }}</dd></div>
+      <div><dt>Vrsta</dt><dd>{% if user.appointment_type == 'DRIVING_TEST' %}Praktični izpit{% elif user.appointment_type == 'CPP' %}Teoretični izpit{% else %}Vse vrste{% endif %}</dd></div>
+    </dl>
+    <div class="card-actions">
+      <a class="button secondary" href="{{ url_for('user_edit', user_index=loop.index0) }}">Uredi</a>
+      <a class="button danger-link" href="{{ url_for('user_delete', user_index=loop.index0) }}">Izbriši</a>
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}

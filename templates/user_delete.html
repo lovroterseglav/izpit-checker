@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Izbriši uporabnika{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('user_list') }}">← Nazaj na uporabnike</a>
+<section class="form-card delete-card">
+  <div class="warning-icon" aria-hidden="true">!</div>
+  <h1>Izbrišem uporabnika?</h1>
+  <p>Uporabnik <strong>{{ user.name }}</strong> ne bo več prejemal obvestil. Tega dejanja ni mogoče razveljaviti.</p>
+  <form method="post">{{ form.hidden_tag() }}<div class="form-actions"><a class="button secondary" href="{{ url_for('user_list') }}">Prekliči</a>{{ form.submit(class_='button danger') }}</div></form>
+</section>
+{% endblock %}

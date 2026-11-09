@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}Napaka{% endblock %}
+{% block content %}
+<section class="form-card delete-card"><div class="warning-icon" aria-hidden="true">!</div><h1>Spremembe ni bilo mogoče shraniti</h1><p>{{ message }}</p><a class="button primary" href="{{ url_for('user_list') }}">Nazaj na uporabnike</a></section>
+{% endblock %}

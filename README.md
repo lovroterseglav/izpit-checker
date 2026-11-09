@@ -126,3 +126,52 @@ For cron, use an absolute path:
 ```cron
 */10 * * * * cd /path/to/izpit-alert && RS_API_KEY=your-key python3 main.py --config config.json
 ```
+
+## Web interface for users
+
+The private Slovenian web interface can add, edit, and delete entries in the
+`users` section of `config.json`. It does not expose scraper settings, email
+settings, hashes, scheduling, or a manual scrape action.
+
+Install the dependencies and create a long random secret:
+
+```bash
+python3 -m pip install -r requirements.txt
+export IZPIT_ALERT_WEB_SECRET="replace-with-a-long-random-value"
+```
+
+Run it directly with Python:
+
+```bash
+python3 web.py
+```
+
+The server listens on `127.0.0.1:8000`. To use another config file, set
+`IZPIT_ALERT_CONFIG=/absolute/path/to/config.json`. To use another port, set
+`PORT`.
+
+For a production process manager, Gunicorn is also supported:
+
+```bash
+gunicorn --bind 127.0.0.1:8000 'web:create_app()'
+```
+
+Put nginx in front of the Python server and protect the location with Basic
+Auth. A minimal location block is:
+
+```nginx
+location / {
+    auth_basic "Izpit Alert";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Run the web tests with:
+
+```bash
+python3 -m unittest discover -s tests
+```

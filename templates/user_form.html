@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('user_list') }}">← Nazaj na uporabnike</a>
+<section class="form-card">
+  <div class="form-heading"><p class="eyebrow">Konfiguracija obvestila</p><h1>{{ title }}</h1><p>Polja z zvezdico so obvezna.</p></div>
+  <form method="post" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="field full"><label for="{{ form.name.id }}">{{ form.name.label.text }} *</label>{{ form.name(autocomplete='name') }}{% for error in form.name.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
+    <div class="field full"><label for="{{ form.email_to.id }}">{{ form.email_to.label.text }} *</label>{{ form.email_to(type='text', inputmode='email', placeholder='ime@example.com, drugo@example.com') }}<small>Več naslovov ločite z vejico.</small>{% for error in form.email_to.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
+    <div class="form-grid">
+      <div class="field"><label for="{{ form.date_from.id }}">{{ form.date_from.label.text }}</label>{{ form.date_from() }}{% for error in form.date_from.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
+      <div class="field"><label for="{{ form.date_to.id }}">{{ form.date_to.label.text }} *</label>{{ form.date_to() }}{% for error in form.date_to.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
+      <div class="field"><label for="{{ form.cities.id }}">{{ form.cities.label.text }}</label>{{ form.cities(placeholder='JESENICE, KRANJ') }}<small>Več krajev ločite z vejico.</small></div>
+      <div class="field"><label for="{{ form.categories.id }}">{{ form.categories.label.text }} *</label>{{ form.categories(placeholder='B') }}{% for error in form.categories.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
+      <div class="field full"><label for="{{ form.appointment_type.id }}">{{ form.appointment_type.label.text }}</label>{{ form.appointment_type() }}</div>
+    </div>
+    {% if form.errors.get('__all__') %}{% for error in form.errors['__all__'] %}<div class="field-error">{{ error }}</div>{% endfor %}{% endif %}
+    <div class="form-actions"><a class="button secondary" href="{{ url_for('user_list') }}">Prekliči</a>{{ form.submit(class_='button primary') }}</div>
+  </form>
+</section>
+{% endblock %}

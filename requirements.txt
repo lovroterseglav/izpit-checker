@@ -1,3 +1,7 @@
 beautifulsoup4>=4.12
+Flask>=3.1
+Flask-WTF>=1.2
+gunicorn>=23.0
 requests>=2.31
 resend>=2.0
+WTForms>=3.3
