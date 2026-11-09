@@ -1,0 +1,22 @@
+{
+  "hash_file": "hash.json",
+  "scrape": {
+    "delay": 0.25,
+    "timeout": 30,
+    "verbose": true
+  },
+  "email": {
+    "from": "Zamudko alerts <alert@zamudko.si>",
+    "subject": "Updates for driving dates"
+  },
+  "users": [
+    {
+      "name": "Janez Novak",
+      "email_to": ["example@example.com"],
+      "date_to": "2026-07-31",
+      "city": ["JESENICE"],
+      "category": ["B"],
+      "type": "DRIVING_TEST"
+    }
+  ]
+}
