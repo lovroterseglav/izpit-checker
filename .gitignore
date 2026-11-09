@@ -1,3 +1,8 @@
 __pycache__/
 *.py[cod]
 .*.lock
+config.json
+hash.json
+.venv/
+.codex/
+.agents/

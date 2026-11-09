@@ -21,8 +21,24 @@
     {
       "name": "Anika Vidic",
       "email_to": ["vidicanika@gmail.com"],
-      "date_from": "2026-08-20",
-      "date_to": "2026-09-20",
+      "date_from": "2026-10-20",
+      "date_to": "2026-11-20",
+      "city": ["JESENICE"],
+      "category": ["B"],
+      "type": "DRIVING_TEST"
+    },
+    {
+      "name": "Nejc Jeran-Pirih",
+      "email_to": "nejc.jeranpirih@gmail.com",
+      "date_to": "2026-09-30",
+      "city": ["JESENICE"],
+      "category": ["B"],
+      "type": "DRIVING_TEST"
+    },
+    {
+      "name": "Ema Meze",
+      "email_to": "ema.meze30@gmail.com",
+      "date_to": "2026-09-10",
       "city": ["JESENICE"],
       "category": ["B"],
       "type": "DRIVING_TEST"
