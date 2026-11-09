@@ -6,3 +6,5 @@ hash.json
 .venv/
 .codex/
 .agents/
+.env
+.idea/
