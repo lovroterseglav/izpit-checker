@@ -15,13 +15,48 @@ from typing import Any, Callable
 
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 from flask_wtf import CSRFProtect, FlaskForm
-from wtforms import DateField, HiddenField, SelectField, StringField, SubmitField
+from wtforms import DateField, HiddenField, SelectField, SelectMultipleField, StringField, SubmitField
 from wtforms.fields.choices import SelectChoice
 from wtforms.validators import DataRequired, Optional
 
 from main import ConfigError, load_json, parse_user, split_csv
 
 EMAIL_PATTERN = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")
+
+LOCATION_CHOICES = (
+    ("AJDOVŠČINA", "Ajdovščina"),
+    ("BREŽICE", "Brežice"),
+    ("CELJE", "Celje"),
+    ("ČRNOMELJ", "Črnomelj"),
+    ("DOMŽALE", "Domžale"),
+    ("IDRIJA", "Idrija"),
+    ("ILIRSKA BISTRICA", "Ilirska Bistrica"),
+    ("JESENICE", "Jesenice"),
+    ("KOČEVJE", "Kočevje"),
+    ("KOPER", "Koper"),
+    ("KRANJ", "Kranj"),
+    ("KRŠKO", "Krško"),
+    ("LITIJA", "Litija"),
+    ("LJUBLJANA", "Ljubljana"),
+    ("MARIBOR", "Maribor"),
+    ("MURSKA SOBOTA", "Murska Sobota"),
+    ("NOVA GORICA", "Nova Gorica"),
+    ("NOVO MESTO BTC EŠČA VAS BE CE", "Novo mesto – BTC Češča vas"),
+    ("NOVO MESTO UE", "Novo mesto – UE"),
+    ("ORMOŽ", "Ormož"),
+    ("POSTOJNA EPIC", "Postojna – EPIC"),
+    ("PTUJ", "Ptuj"),
+    ("RAVNE NA KOROŠKEM", "Ravne na Koroškem"),
+    ("SEŽANA", "Sežana"),
+    ("SLOVENJ GRADEC", "Slovenj Gradec"),
+    ("SLOVENSKA BISTRICA", "Slovenska Bistrica"),
+    ("TOLMIN", "Tolmin"),
+    ("TRBOVLJE", "Trbovlje"),
+    ("VELENJE", "Velenje"),
+    ("VRHNIKA", "Vrhnika"),
+)
+
+CATEGORY_VALUES = ("AM", "A1", "A2", "A", "B1", "B", "BE", "C1", "C1E", "C", "CE", "D1", "D1E", "D", "DE", "F", "G")
 
 
 class StaleConfigError(RuntimeError):
@@ -36,16 +71,19 @@ class UserForm(FlaskForm):
     )
     date_from = DateField("Datum od", validators=[Optional()])
     date_to = DateField("Datum do", validators=[DataRequired(message="Datum do je obvezen.")])
-    cities = StringField("Kraji", validators=[Optional()])
-    categories = StringField("Kategorije", validators=[DataRequired(message="Vnesite vsaj eno kategorijo.")])
+    cities = SelectMultipleField("Kraji", choices=[], validators=[Optional()])
+    categories = SelectField(
+        "Kategorija",
+        choices=[SelectChoice(value, value) for value in CATEGORY_VALUES],
+        validators=[DataRequired(message="Izberite kategorijo.")],
+    )
     appointment_type = SelectField(
         "Vrsta izpita",
         choices=[
-            SelectChoice("", "Vse vrste"),
+            SelectChoice("CPP", "CPP"),
             SelectChoice("DRIVING_TEST", "Praktični izpit"),
-            SelectChoice("CPP", "Teoretični izpit (CPP)"),
         ],
-        validators=[Optional()],
+        validators=[DataRequired(message="Izberite vrsto izpita.")],
     )
     revision = HiddenField()
     submit = SubmitField("Shrani uporabnika")
@@ -80,6 +118,31 @@ def validate_emails(values: list[str]) -> None:
         raise ConfigError("Neveljaven e-poštni naslov: " + ", ".join(invalid))
 
 
+def configure_form_choices(
+    form: UserForm,
+    users: list[dict[str, Any]],
+    existing: dict[str, Any] | None = None,
+) -> None:
+    known_locations = {value for value, _label in LOCATION_CHOICES}
+    legacy_locations: set[str] = set()
+    for index, raw in enumerate(users):
+        legacy_locations.update(parse_user(raw, index).cities)
+    form.cities.choices = [SelectChoice(value, label) for value, label in LOCATION_CHOICES]
+    form.cities.choices.extend(
+        SelectChoice(value, f"{value} (obstoječa vrednost)")
+        for value in sorted(legacy_locations - known_locations)
+    )
+
+    if existing is not None:
+        existing_user = parse_user(existing, 0)
+        known_categories = set(CATEGORY_VALUES)
+        form.categories.choices.extend(
+            SelectChoice(value, f"{value} (obstoječa vrednost)")
+            for value in existing_user.categories
+            if value not in known_categories
+        )
+
+
 def form_user(form: UserForm, existing: dict[str, Any] | None, index: int) -> dict[str, Any]:
     emails = email_values(form.email_to.data or "")
     validate_emails(emails)
@@ -90,19 +153,15 @@ def form_user(form: UserForm, existing: dict[str, Any] | None, index: int) -> di
             "name": (form.name.data or "").strip(),
             "email_to": emails,
             "date_to": form.date_to.data.isoformat() if form.date_to.data else None,
-            "city": split_csv([form.cities.data or ""]),
-            "category": split_csv([form.categories.data or ""]),
+            "city": list(form.cities.data or []),
+            "category": [form.categories.data] if form.categories.data else [],
+            "type": form.appointment_type.data,
         }
     )
     if form.date_from.data:
         raw["date_from"] = form.date_from.data.isoformat()
     else:
         raw.pop("date_from", None)
-    if form.appointment_type.data:
-        raw["type"] = form.appointment_type.data
-    else:
-        raw.pop("type", None)
-
     parsed = parse_user(raw, index)
     raw.update(
         {
@@ -122,9 +181,9 @@ def populate_form(form: UserForm, raw: dict[str, Any], index: int) -> None:
     form.email_to.data = ", ".join(user.email_to)
     form.date_from.data = user.date_from
     form.date_to.data = user.date_to
-    form.cities.data = ", ".join(user.cities)
-    form.categories.data = ", ".join(user.categories)
-    form.appointment_type.data = user.appointment_type or ""
+    form.cities.data = user.cities
+    form.categories.data = user.categories[0] if user.categories else "B"
+    form.appointment_type.data = user.appointment_type
 
 
 def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
@@ -212,6 +271,7 @@ def create_app(config_path: str | Path | None = None, test_config: dict[str, Any
     def user_new():
         _data, users = read()
         form = UserForm()
+        configure_form_choices(form, users)
         if request.method == "GET":
             form.categories.data = "B"
             form.appointment_type.data = "DRIVING_TEST"
@@ -233,6 +293,7 @@ def create_app(config_path: str | Path | None = None, test_config: dict[str, Any
         if user_index < 0 or user_index >= len(users):
             abort(404)
         form = UserForm()
+        configure_form_choices(form, users, users[user_index])
         if request.method == "GET":
             populate_form(form, users[user_index], user_index)
             form.revision.data = users_revision(users)

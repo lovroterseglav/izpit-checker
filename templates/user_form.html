@@ -11,12 +11,33 @@
     <div class="form-grid">
       <div class="field"><label for="{{ form.date_from.id }}">{{ form.date_from.label.text }}</label>{{ form.date_from() }}{% for error in form.date_from.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
       <div class="field"><label for="{{ form.date_to.id }}">{{ form.date_to.label.text }} *</label>{{ form.date_to() }}{% for error in form.date_to.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
-      <div class="field"><label for="{{ form.cities.id }}">{{ form.cities.label.text }}</label>{{ form.cities(placeholder='JESENICE, KRANJ') }}<small>Več krajev ločite z vejico.</small></div>
-      <div class="field"><label for="{{ form.categories.id }}">{{ form.categories.label.text }} *</label>{{ form.categories(placeholder='B') }}{% for error in form.categories.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
-      <div class="field full"><label for="{{ form.appointment_type.id }}">{{ form.appointment_type.label.text }}</label>{{ form.appointment_type() }}</div>
+      <div class="field">
+        <span class="field-label">{{ form.cities.label.text }}</span>
+        <details class="multi-select" data-multi-select>
+          <summary><span data-selection-summary>Vsi kraji</span><span class="chevron" aria-hidden="true">⌄</span></summary>
+          <div class="multi-select-panel">
+            <label class="search-label" for="city-search">Išči kraj</label>
+            <input id="city-search" class="choice-search" type="search" placeholder="Išči kraj …" autocomplete="off" data-choice-search>
+            <div class="choice-list" data-choice-list>
+              {% for choice in form.cities.choices %}
+              <label class="choice" data-choice data-search-text="{{ choice.label|lower }}">
+                <input type="checkbox" name="{{ form.cities.name }}" value="{{ choice.value }}" {% if choice.value in (form.cities.data or []) %}checked{% endif %}>
+                <span>{{ choice.label }}</span>
+              </label>
+              {% endfor %}
+              <p class="no-choices" data-no-choices hidden>Ni zadetkov.</p>
+            </div>
+          </div>
+        </details>
+        <small>Prazna izbira pomeni vse kraje.</small>
+        {% for error in form.cities.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+      </div>
+      <div class="field"><label for="{{ form.categories.id }}">{{ form.categories.label.text }} *</label>{{ form.categories() }}{% for error in form.categories.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
+      <div class="field full"><label for="{{ form.appointment_type.id }}">{{ form.appointment_type.label.text }} *</label>{{ form.appointment_type() }}{% for error in form.appointment_type.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>
     </div>
     {% if form.errors.get('__all__') %}{% for error in form.errors['__all__'] %}<div class="field-error">{{ error }}</div>{% endfor %}{% endif %}
     <div class="form-actions"><a class="button secondary" href="{{ url_for('user_list') }}">Prekliči</a>{{ form.submit(class_='button primary') }}</div>
   </form>
 </section>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='multiselect.js') }}" defer></script>{% endblock %}

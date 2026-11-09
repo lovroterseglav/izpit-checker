@@ -60,14 +60,14 @@ class WebAppTest(unittest.TestCase):
     def revision(self) -> str:
         return users_revision(self.read_config()["users"])
 
-    def valid_form(self, **overrides: str) -> dict[str, str]:
+    def valid_form(self, **overrides):
         data = {
             "name": "Cilka",
             "email_to": "cilka@example.com, drugo@example.com",
             "date_from": "2026-11-11",
             "date_to": "2026-12-20",
-            "cities": "Jesenice, Kranj",
-            "categories": "B, BE",
+            "cities": ["JESENICE", "KRANJ"],
+            "categories": "B",
             "appointment_type": "DRIVING_TEST",
             "revision": self.revision(),
         }
@@ -88,6 +88,19 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(config["email"], BASE_CONFIG["email"])
         self.assertEqual(config["users"][-1]["name"], "Cilka")
         self.assertEqual(config["users"][-1]["city"], ["JESENICE", "KRANJ"])
+        self.assertEqual(config["users"][-1]["category"], ["B"])
+
+    def test_form_renders_searchable_locations_and_constrained_selects(self) -> None:
+        response = self.client.get("/users/new")
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-choice-search', body)
+        self.assertIn('value="JESENICE"', body)
+        self.assertIn('value="CPP"', body)
+        self.assertIn('value="DRIVING_TEST"', body)
+        self.assertNotIn("Vse vrste", body)
+        for category in ("AM", "A1", "B", "CE", "G"):
+            self.assertIn(f'value="{category}"', body)
 
     def test_edit_renames_user_preserves_unknown_field_and_hashes(self) -> None:
         hash_before = self.hash_path.read_bytes()
@@ -126,6 +139,36 @@ class WebAppTest(unittest.TestCase):
         response = self.client.post("/users/new", data=self.valid_form(email_to="not-an-email"))
         self.assertEqual(response.status_code, 400)
         self.assertEqual(self.config_path.read_bytes(), before)
+
+    def test_rejects_unknown_city_without_writing(self) -> None:
+        before = self.config_path.read_bytes()
+        response = self.client.post("/users/new", data=self.valid_form(cities=["NOT A LOCATION"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.config_path.read_bytes(), before)
+
+    def test_rejects_missing_or_invalid_exam_type(self) -> None:
+        before = self.config_path.read_bytes()
+        missing = self.client.post("/users/new", data=self.valid_form(appointment_type=""))
+        invalid = self.client.post("/users/new", data=self.valid_form(appointment_type="TEST"))
+        self.assertEqual(missing.status_code, 200)
+        self.assertEqual(invalid.status_code, 200)
+        self.assertEqual(self.config_path.read_bytes(), before)
+
+    def test_rejects_invalid_category(self) -> None:
+        before = self.config_path.read_bytes()
+        response = self.client.post("/users/new", data=self.valid_form(categories="INVALID"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.config_path.read_bytes(), before)
+
+    def test_preserves_legacy_city_as_an_edit_option(self) -> None:
+        config = self.read_config()
+        config["users"][0]["city"] = ["LEGACY LOCATION"]
+        self.write_config(config)
+        response = self.client.get("/users/0/edit")
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('value="LEGACY LOCATION" checked', body)
+        self.assertIn("LEGACY LOCATION (obstoječa vrednost)", body)
 
     def test_rejects_stale_form(self) -> None:
         old_revision = self.revision()
