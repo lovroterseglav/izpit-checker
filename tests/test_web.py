@@ -92,6 +92,18 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('action="/users/1/run"', response.get_data(as_text=True))
         self.assertNotIn('action="/run"', response.get_data(as_text=True))
 
+    def test_respects_reverse_proxy_path_prefix(self) -> None:
+        headers = {"X-Forwarded-Prefix": "/termini", "X-Forwarded-Proto": "https"}
+        response = self.client.get("/users", headers=headers)
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('href="/termini/users/new"', body)
+        self.assertIn('href="/termini/static/style.css"', body)
+        self.assertIn('action="/termini/users/0/run"', body)
+
+        redirect_response = self.client.get("/", headers=headers)
+        self.assertEqual(redirect_response.location, "/termini/users")
+
     def test_manual_run_uses_selected_user_and_reports_success(self) -> None:
         response = self.client.post(
             "/users/0/run",

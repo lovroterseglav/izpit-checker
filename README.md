@@ -177,6 +177,25 @@ location / {
 }
 ```
 
+To publish the interface below a path such as `/termini/`, strip that prefix
+when proxying and forward it to the application:
+
+```nginx
+location = /termini {
+    return 301 /termini/;
+}
+
+location /termini/ {
+    auth_basic "Izpit Alert";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    proxy_pass http://127.0.0.1:8000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Prefix /termini;
+}
+```
+
 Run the web tests with:
 
 ```bash

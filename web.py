@@ -16,6 +16,7 @@ from typing import Any, Callable
 
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 from flask_wtf import CSRFProtect, FlaskForm
+from werkzeug.middleware.proxy_fix import ProxyFix
 from wtforms import DateField, HiddenField, SelectField, SelectMultipleField, StringField, SubmitField
 from wtforms.fields.choices import SelectChoice
 from wtforms.validators import DataRequired, Optional
@@ -236,6 +237,7 @@ def update_config(
 
 def create_app(config_path: str | Path | None = None, test_config: dict[str, Any] | None = None) -> Flask:
     app = Flask(__name__)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     default_path = Path(__file__).with_name("config.json")
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("IZPIT_ALERT_WEB_SECRET"),
