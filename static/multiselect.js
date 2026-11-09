@@ -1,8 +1,14 @@
-document.querySelectorAll("[data-multi-select]").forEach((dropdown) => {
+document.querySelectorAll("[data-choice-dropdown]").forEach((dropdown) => {
   const search = dropdown.querySelector("[data-choice-search]");
   const choices = [...dropdown.querySelectorAll("[data-choice]")];
+  const choiceList = dropdown.querySelector("[data-choice-list]");
   const summary = dropdown.querySelector("[data-selection-summary]");
   const noChoices = dropdown.querySelector("[data-no-choices]");
+  const isSingleSelect = dropdown.dataset.selectionMode === "single";
+
+  choices.forEach((choice, index) => {
+    choice.dataset.originalOrder = index;
+  });
 
   const normalize = (value) => value
     .normalize("NFD")
@@ -12,8 +18,8 @@ document.querySelectorAll("[data-multi-select]").forEach((dropdown) => {
   const updateSummary = () => {
     const selected = choices.filter((choice) => choice.querySelector("input").checked);
     if (selected.length === 0) {
-      summary.textContent = "Vsi kraji";
-    } else if (selected.length === 1) {
+      summary.textContent = dropdown.dataset.emptyLabel;
+    } else if (isSingleSelect || selected.length === 1) {
       summary.textContent = selected[0].querySelector("span").textContent;
     } else {
       summary.textContent = `${selected.length} izbranih krajev`;
@@ -31,10 +37,28 @@ document.querySelectorAll("[data-multi-select]").forEach((dropdown) => {
     noChoices.hidden = visible !== 0;
   };
 
-  choices.forEach((choice) => choice.querySelector("input").addEventListener("change", updateSummary));
+  const sortChoices = () => {
+    [...choices]
+      .sort((left, right) => {
+        const selectedDifference = Number(right.querySelector("input").checked)
+          - Number(left.querySelector("input").checked);
+        return selectedDifference || Number(left.dataset.originalOrder) - Number(right.dataset.originalOrder);
+      })
+      .forEach((choice) => choiceList.insertBefore(choice, noChoices));
+  };
+
+  choices.forEach((choice) => choice.querySelector("input").addEventListener("change", () => {
+    sortChoices();
+    updateSummary();
+    if (isSingleSelect) {
+      dropdown.removeAttribute("open");
+      dropdown.querySelector("summary").focus();
+    }
+  }));
   search.addEventListener("input", filterChoices);
   dropdown.addEventListener("toggle", () => {
     if (dropdown.open) {
+      sortChoices();
       search.value = "";
       filterChoices();
       search.focus();
@@ -50,5 +74,6 @@ document.querySelectorAll("[data-multi-select]").forEach((dropdown) => {
     if (!dropdown.contains(event.target)) dropdown.removeAttribute("open");
   });
 
+  sortChoices();
   updateSummary();
 });
