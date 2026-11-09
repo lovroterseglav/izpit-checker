@@ -21,6 +21,7 @@ import time
 from bs4 import BeautifulSoup
 from collections import defaultdict
 from dataclasses import dataclass
+from html import escape
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urlencode, urlparse
@@ -34,6 +35,8 @@ CONFIG_TYPES = {
     "DRIVING_TEST": DRIVING_TEST_TYPE,
 }
 RESEND_API_KEY_ENV = "RS_API_KEY"
+DEFAULT_EMAIL_SUBJECT = "Prosti termini za vozniški izpit"
+LEGACY_EMAIL_SUBJECT = "Updates for driving dates"
 logger = logging.getLogger(__name__)
 
 
@@ -350,34 +353,96 @@ def stable_hash(payload: Any) -> str:
 
 
 def format_filters(user: UserConfig) -> list[str]:
-    filters: list[str] = []
-    if user.date_from:
-        filters.append(f"from {user.date_from.isoformat()}")
-    filters.append(f"to {user.date_to.isoformat()}")
-    if user.cities:
-        filters.append("cities: " + ", ".join(user.cities))
-    if user.categories:
-        filters.append("categories: " + ", ".join(user.categories))
-    if user.appointment_type:
-        filters.append(f"type: {user.appointment_type}")
-    return filters
+    appointment_types = {
+        "CPP": "teoretični izpit (CPP)",
+        "DRIVING_TEST": "praktični izpit",
+    }
+    date_from = user.date_from.strftime(DATE_FORMAT) if user.date_from else "danes"
+    return [
+        f"od: {date_from}",
+        f"do: {user.date_to.strftime(DATE_FORMAT)}",
+        "kraji: " + (", ".join(user.cities) if user.cities else "vsi kraji"),
+        "kategorije: " + (", ".join(user.categories) if user.categories else "vse kategorije"),
+        "vrsta: " + appointment_types.get(user.appointment_type, "vse vrste"),
+    ]
 
 
 def format_pretty_summary(payload: dict[str, Any], user: UserConfig) -> str:
     result = payload.get("result", {})
-    lines = [f"Appointment alert for {user.name}", ""]
+    lines = [f"Prosti termini za vozniški izpit – {user.name}", ""]
     filters = format_filters(user)
     if filters:
-        lines.append("Filters: " + " | ".join(filters))
+        lines.append("Izbrani filtri: " + " | ".join(filters))
         lines.append("")
     if not result:
-        lines.append("No matching appointments found.")
+        lines.append("Trenutno ni najdenih prostih terminov, ki ustrezajo izbranim filtrom.")
         return "\n".join(lines)
 
-    lines.append(f"Found matching appointments on {len(result)} date(s):")
+    lines.append(f"Število datumov s prostimi termini: {len(result)}")
     for date, cities in result.items():
         lines.append(f"- {date}: {', '.join(cities)}")
     return "\n".join(lines)
+
+
+def format_html_summary(payload: dict[str, Any], user: UserConfig) -> str:
+    result = payload.get("result", {})
+    filters = format_filters(user)
+    filter_rows = "".join(
+        f'<span style="display:inline-block;margin:0 6px 8px 0;padding:6px 10px;'
+        f'border-radius:999px;background:#eef2ff;color:#344054;font-size:13px;">{escape(value)}</span>'
+        for value in filters
+    )
+
+    if result:
+        appointment_rows = "".join(
+            '<tr>'
+            f'<td style="padding:14px 16px;border-bottom:1px solid #e4e7ec;font-weight:700;'
+            f'white-space:nowrap;color:#14213d;">{escape(date)}</td>'
+            f'<td style="padding:14px 16px;border-bottom:1px solid #e4e7ec;color:#344054;">'
+            f'{escape(", ".join(cities))}</td>'
+            '</tr>'
+            for date, cities in result.items()
+        )
+        results_html = (
+            f'<p style="margin:0 0 12px;color:#344054;">Število datumov s prostimi termini: '
+            f'<strong>{len(result)}</strong></p>'
+            '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+            'style="border:1px solid #e4e7ec;border-radius:12px;border-collapse:separate;'
+            f'border-spacing:0;overflow:hidden;">{appointment_rows}</table>'
+        )
+    else:
+        results_html = (
+            '<div style="padding:18px;border-radius:12px;background:#f8fafc;border:1px solid #e4e7ec;">'
+            '<p style="margin:0;color:#475467;">Trenutno ni najdenih prostih terminov, ki ustrezajo '
+            'izbranim filtrom.</p></div>'
+        )
+
+    return f"""<!doctype html>
+<html lang="sl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f7fb;font-family:Arial,sans-serif;color:#172033;">
+  <div style="display:none;max-height:0;overflow:hidden;">Pregled prostih terminov za vozniški izpit.</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f7fb;">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;">
+        <tr><td style="padding:24px 28px;background:#14213d;border-radius:16px 16px 0 0;color:#fff;">
+          <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1;">Izpit Alert</div>
+          <h1 style="margin:8px 0 0;font-size:25px;line-height:1.25;">Prosti termini za vozniški izpit</h1>
+        </td></tr>
+        <tr><td style="padding:28px;background:#fff;border:1px solid #e4e7ec;border-top:0;border-radius:0 0 16px 16px;">
+          <p style="margin:0 0 20px;font-size:16px;">Pozdravljeni, <strong>{escape(user.name)}</strong>!</p>
+          <p style="margin:0 0 10px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#667085;">Izbrani filtri</p>
+          <div style="margin-bottom:20px;">{filter_rows}</div>
+          {results_html}
+          <p style="margin:24px 0 0;padding-top:18px;border-top:1px solid #e4e7ec;font-size:12px;line-height:1.5;color:#667085;">
+            To je samodejno obvestilo storitve Izpit Alert.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
 
 
 def require_env_var(name: str) -> str:
@@ -387,17 +452,25 @@ def require_env_var(name: str) -> str:
     return value
 
 
-def send_email(text: str, user: UserConfig, email: EmailConfig, api_key: str) -> None:
+def send_email(
+    text: str,
+    user: UserConfig,
+    email: EmailConfig,
+    api_key: str,
+    *,
+    html: str | None = None,
+) -> None:
     resend.api_key = api_key
+    message: dict[str, Any] = {
+        "from": email.sender,
+        "to": user.email_to,
+        "subject": email.subject,
+        "text": text,
+    }
+    if html is not None:
+        message["html"] = html
     try:
-        result = resend.Emails.send(
-            {
-                "from": email.sender,
-                "to": user.email_to,
-                "subject": email.subject,
-                "text": text,
-            }
-        )
+        result = resend.Emails.send(message)
     except Exception:
         logger.exception("Failed to send email for %s to %s", user.name, ", ".join(user.email_to))
         raise
@@ -479,7 +552,9 @@ def parse_scrape_config(data: dict[str, Any]) -> ScrapeConfig:
 def parse_email_config(data: dict[str, Any]) -> EmailConfig:
     email = require_object(data.get("email", {}), "email")
     sender = email.get("from", "Zamudko alerts <alert@zamudko.si>")
-    subject = email.get("subject", "Updates for driving dates")
+    subject = email.get("subject", DEFAULT_EMAIL_SUBJECT)
+    if subject == LEGACY_EMAIL_SUBJECT:
+        subject = DEFAULT_EMAIL_SUBJECT
     if not isinstance(sender, str) or not sender:
         raise ConfigError("email.from must be a non-empty string")
     if not isinstance(subject, str) or not subject:
@@ -571,8 +646,9 @@ def run(config: AppConfig) -> None:
             continue
 
         text = format_pretty_summary(payload, user)
+        html = format_html_summary(payload, user)
         logger.info("%s\n", text)
-        send_email(text, user, config.email, api_key)
+        send_email(text, user, config.email, api_key, html=html)
         user_hashes[user.name] = new_hash
         changed = True
 
@@ -596,8 +672,9 @@ def run_user(config: AppConfig, user: UserConfig) -> None:
     items = filter_appointments(appointments, user)
     payload = summarize_by_date(items, user)
     text = format_pretty_summary(payload, user)
+    html = format_html_summary(payload, user)
     logger.info("%s\n", text)
-    send_email(text, user, config.email, api_key)
+    send_email(text, user, config.email, api_key, html=html)
 
     if config.scrape.verbose:
         elapsed = time.monotonic() - started

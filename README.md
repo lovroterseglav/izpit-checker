@@ -57,7 +57,7 @@ Example:
   },
   "email": {
     "from": "Zamudko alerts <alert@example.com>",
-    "subject": "Updates for driving dates"
+    "subject": "Prosti termini za vozniški izpit"
   },
   "users": [
     {

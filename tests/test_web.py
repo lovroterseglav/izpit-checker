@@ -4,10 +4,11 @@ import json
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from main import ConfigError, parse_config, run_user
+from main import ConfigError, format_html_summary, parse_config, run_user, send_email
 from web import create_app, users_revision
 
 
@@ -153,11 +154,45 @@ class WebAppTest(unittest.TestCase):
             run_user(config, config.users[0])
 
         send_email.assert_called_once()
-        self.assertIn("No matching appointments found.", send_email.call_args.args[0])
+        self.assertIn("Trenutno ni najdenih prostih terminov", send_email.call_args.args[0])
         self.assertEqual(send_email.call_args.args[1].name, "Ana")
+        self.assertIn('lang="sl"', send_email.call_args.kwargs["html"])
+        self.assertIn("Prosti termini za vozniški izpit", send_email.call_args.kwargs["html"])
         read_hashes.assert_not_called()
         write_hashes.assert_not_called()
         self.assertEqual(self.hash_path.read_bytes(), hash_before)
+
+    def test_html_email_escapes_user_and_appointment_data(self) -> None:
+        config = parse_config(self.config_path)
+        user = replace(config.users[0], name="<Ana & družba>")
+        html = format_html_summary(
+            {"result": {"10. 11. 2026": ["<JESENICE & OKOLICA>"]}},
+            user,
+        )
+        self.assertIn("&lt;Ana &amp; družba&gt;", html)
+        self.assertIn("&lt;JESENICE &amp; OKOLICA&gt;", html)
+        self.assertNotIn("<Ana & družba>", html)
+
+    def test_send_email_includes_plain_text_and_html(self) -> None:
+        config = parse_config(self.config_path)
+        with patch("main.resend.Emails.send", return_value={"id": "test"}) as resend_send:
+            send_email(
+                "Besedilna različica",
+                config.users[0],
+                config.email,
+                "test-key",
+                html="<p>HTML različica</p>",
+            )
+
+        message = resend_send.call_args.args[0]
+        self.assertEqual(message["text"], "Besedilna različica")
+        self.assertEqual(message["html"], "<p>HTML različica</p>")
+
+    def test_translates_legacy_default_subject(self) -> None:
+        config_data = self.read_config()
+        config_data["email"]["subject"] = "Updates for driving dates"
+        self.write_config(config_data)
+        self.assertEqual(parse_config(self.config_path).email.subject, "Prosti termini za vozniški izpit")
 
     def test_adds_user_and_preserves_other_config(self) -> None:
         response = self.client.post("/users/new", data=self.valid_form())
