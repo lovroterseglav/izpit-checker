@@ -2,8 +2,14 @@
 {% block title %}Uporabniki{% endblock %}
 {% block content %}
 <section class="page-heading">
-  <div><p class="eyebrow">Konfiguracija obvestil</p><h1>Uporabniki</h1><p>Upravljajte prejemnike in njihove filtre za proste termine.</p></div>
-  <a class="button primary" href="{{ url_for('user_new') }}">+ Dodaj uporabnika</a>
+  <div><p class="eyebrow">Konfiguracija obvestil</p><h1>Uporabniki</h1><p>Upravljajte prejemnike in njihove filtre. Ročno preverjanje pošlje obvestila samo ob spremembah.</p></div>
+  <div class="heading-actions">
+    <form method="post" action="{{ url_for('run_now') }}">
+      {{ run_form.hidden_tag() }}
+      {{ run_form.submit(class_='button secondary') }}
+    </form>
+    <a class="button primary" href="{{ url_for('user_new') }}">+ Dodaj uporabnika</a>
+  </div>
 </section>
 <section class="user-grid" aria-label="Seznam uporabnikov">
   {% for user in users %}

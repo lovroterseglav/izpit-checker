@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from main import ConfigError, RunInProgressError, run_lock
 from web import create_app, users_revision
 
 
@@ -42,9 +43,15 @@ class WebAppTest(unittest.TestCase):
         self.hash_path = Path(self.temporary.name) / "hash.json"
         self.write_config(BASE_CONFIG)
         self.hash_path.write_text('{"users":{"Ana":"unchanged"}}\n', encoding="utf-8")
+        self.run_calls = []
         self.app = create_app(
             self.config_path,
-            {"TESTING": True, "SECRET_KEY": "test-secret", "WTF_CSRF_ENABLED": False},
+            {
+                "TESTING": True,
+                "SECRET_KEY": "test-secret",
+                "WTF_CSRF_ENABLED": False,
+                "RUNNER": self.run_calls.append,
+            },
         )
         self.client = self.app.test_client()
 
@@ -79,6 +86,37 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Ana", response.get_data(as_text=True))
         self.assertIn("Bine", response.get_data(as_text=True))
+        self.assertIn('action="/run"', response.get_data(as_text=True))
+
+    def test_manual_run_uses_config_and_reports_success(self) -> None:
+        response = self.client.post("/run", follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.run_calls, [self.config_path.resolve()])
+        self.assertIn("Preverjanje je bilo uspešno zaključeno.", response.get_data(as_text=True))
+
+    def test_manual_run_reports_already_running(self) -> None:
+        def already_running(_path):
+            raise RunInProgressError
+
+        self.app.config["RUNNER"] = already_running
+        response = self.client.post("/run", follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Preverjanje že poteka.", response.get_data(as_text=True))
+
+    def test_manual_run_reports_safe_config_error(self) -> None:
+        def invalid_config(_path):
+            raise ConfigError("invalid test config")
+
+        self.app.config["RUNNER"] = invalid_config
+        response = self.client.post("/run", follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("invalid test config", response.get_data(as_text=True))
+
+    def test_run_lock_rejects_an_overlapping_check(self) -> None:
+        with run_lock(self.config_path):
+            with self.assertRaises(RunInProgressError):
+                with run_lock(self.config_path):
+                    self.fail("overlapping lock unexpectedly succeeded")
 
     def test_adds_user_and_preserves_other_config(self) -> None:
         response = self.client.post("/users/new", data=self.valid_form())
@@ -186,6 +224,8 @@ class WebAppTest(unittest.TestCase):
         app = create_app(self.config_path, {"TESTING": True, "SECRET_KEY": "test-secret"})
         response = app.test_client().post("/users/new", data={})
         self.assertEqual(response.status_code, 400)
+        run_response = app.test_client().post("/run")
+        self.assertEqual(run_response.status_code, 400)
 
 
 if __name__ == "__main__":

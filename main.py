@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import logging
@@ -20,6 +21,7 @@ import requests
 import time
 from bs4 import BeautifulSoup
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -35,6 +37,10 @@ CONFIG_TYPES = {
 }
 RESEND_API_KEY_ENV = "RS_API_KEY"
 logger = logging.getLogger(__name__)
+
+
+class RunInProgressError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -551,6 +557,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+@contextmanager
+def run_lock(config_path: Path):
+    lock_path = config_path.resolve().parent / ".izpit-alert-run.lock"
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RunInProgressError("an appointment check is already running") from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def run_config(config_path: Path) -> None:
+    with run_lock(config_path):
+        run(parse_config(config_path))
+
+
 def run(config: AppConfig) -> None:
     started = time.monotonic()
     api_key = require_env_var(RESEND_API_KEY_ENV)
@@ -588,8 +613,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = build_parser().parse_args()
     try:
-        run(parse_config(Path(args.config)))
-    except ConfigError as exc:
+        run_config(Path(args.config))
+    except (ConfigError, RunInProgressError) as exc:
         logger.error("%s", exc)
         raise SystemExit(1) from exc
     except Exception:

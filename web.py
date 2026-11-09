@@ -6,6 +6,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import re
 import stat
@@ -19,7 +20,9 @@ from wtforms import DateField, HiddenField, SelectField, SelectMultipleField, St
 from wtforms.fields.choices import SelectChoice
 from wtforms.validators import DataRequired, Optional
 
-from main import ConfigError, load_json, parse_user, split_csv
+from main import ConfigError, RunInProgressError, load_json, parse_user, run_config, split_csv
+
+logger = logging.getLogger(__name__)
 
 EMAIL_PATTERN = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")
 
@@ -92,6 +95,10 @@ class UserForm(FlaskForm):
 class DeleteForm(FlaskForm):
     revision = HiddenField()
     submit = SubmitField("Izbriši uporabnika")
+
+
+class RunForm(FlaskForm):
+    submit = SubmitField("Preveri zdaj")
 
 
 def users_revision(users: list[dict[str, Any]]) -> str:
@@ -232,6 +239,7 @@ def create_app(config_path: str | Path | None = None, test_config: dict[str, Any
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("IZPIT_ALERT_WEB_SECRET"),
         CONFIG_PATH=Path(config_path or os.environ.get("IZPIT_ALERT_CONFIG", default_path)).resolve(),
+        RUNNER=run_config,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
     )
@@ -265,7 +273,25 @@ def create_app(config_path: str | Path | None = None, test_config: dict[str, Any
     def user_list():
         _data, users = read()
         parsed_users = [parse_user(raw, index) for index, raw in enumerate(users)]
-        return render_template("users.html", users=parsed_users)
+        return render_template("users.html", users=parsed_users, run_form=RunForm())
+
+    @app.post("/run")
+    def run_now():
+        form = RunForm()
+        if not form.validate_on_submit():
+            abort(400)
+        try:
+            app.config["RUNNER"](app.config["CONFIG_PATH"])
+        except RunInProgressError:
+            flash("Preverjanje že poteka.", "warning")
+        except ConfigError as exc:
+            flash(f"Preverjanja ni bilo mogoče zagnati: {exc}", "error")
+        except Exception:
+            logger.exception("Manual appointment check failed")
+            flash("Preverjanje ni uspelo. Podrobnosti so v strežniškem dnevniku.", "error")
+        else:
+            flash("Preverjanje je bilo uspešno zaključeno.", "success")
+        return redirect(url_for("user_list"))
 
     @app.route("/users/new", methods=["GET", "POST"])
     def user_new():
