@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from main import ConfigError, RunInProgressError, run_lock
+from main import ConfigError, parse_config, run_user
 from web import create_app, users_revision
 
 
@@ -50,7 +52,7 @@ class WebAppTest(unittest.TestCase):
                 "TESTING": True,
                 "SECRET_KEY": "test-secret",
                 "WTF_CSRF_ENABLED": False,
-                "RUNNER": self.run_calls.append,
+                "USER_RUNNER": lambda path, name: self.run_calls.append((path, name)),
             },
         )
         self.client = self.app.test_client()
@@ -86,37 +88,64 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Ana", response.get_data(as_text=True))
         self.assertIn("Bine", response.get_data(as_text=True))
-        self.assertIn('action="/run"', response.get_data(as_text=True))
+        self.assertIn('action="/users/0/run"', response.get_data(as_text=True))
+        self.assertIn('action="/users/1/run"', response.get_data(as_text=True))
+        self.assertNotIn('action="/run"', response.get_data(as_text=True))
 
-    def test_manual_run_uses_config_and_reports_success(self) -> None:
-        response = self.client.post("/run", follow_redirects=True)
+    def test_manual_run_uses_selected_user_and_reports_success(self) -> None:
+        response = self.client.post(
+            "/users/0/run",
+            data={"run-0-revision": self.revision()},
+            follow_redirects=True,
+        )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.run_calls, [self.config_path.resolve()])
-        self.assertIn("Preverjanje je bilo uspešno zaključeno.", response.get_data(as_text=True))
+        self.assertEqual(self.run_calls, [(self.config_path.resolve(), "Ana")])
+        self.assertIn("E-pošta za uporabnika Ana je bila uspešno poslana.", response.get_data(as_text=True))
 
-    def test_manual_run_reports_already_running(self) -> None:
-        def already_running(_path):
-            raise RunInProgressError
-
-        self.app.config["RUNNER"] = already_running
-        response = self.client.post("/run", follow_redirects=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Preverjanje že poteka.", response.get_data(as_text=True))
+    def test_manual_run_rejects_stale_user_list(self) -> None:
+        old_revision = self.revision()
+        config = self.read_config()
+        config["users"].reverse()
+        self.write_config(config)
+        response = self.client.post("/users/0/run", data={"run-0-revision": old_revision})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.run_calls, [])
 
     def test_manual_run_reports_safe_config_error(self) -> None:
-        def invalid_config(_path):
+        def invalid_config(_path, _name):
             raise ConfigError("invalid test config")
 
-        self.app.config["RUNNER"] = invalid_config
-        response = self.client.post("/run", follow_redirects=True)
+        self.app.config["USER_RUNNER"] = invalid_config
+        response = self.client.post(
+            "/users/0/run",
+            data={"run-0-revision": self.revision()},
+            follow_redirects=True,
+        )
         self.assertEqual(response.status_code, 200)
         self.assertIn("invalid test config", response.get_data(as_text=True))
 
-    def test_run_lock_rejects_an_overlapping_check(self) -> None:
-        with run_lock(self.config_path):
-            with self.assertRaises(RunInProgressError):
-                with run_lock(self.config_path):
-                    self.fail("overlapping lock unexpectedly succeeded")
+    def test_manual_run_rejects_unknown_user_index(self) -> None:
+        response = self.client.post("/users/99/run", data={"run-99-revision": self.revision()})
+        self.assertEqual(response.status_code, 404)
+
+    def test_manual_run_always_sends_without_accessing_hashes(self) -> None:
+        config = parse_config(self.config_path)
+        hash_before = self.hash_path.read_bytes()
+        with (
+            patch.dict(os.environ, {"RS_API_KEY": "test-key"}),
+            patch("main.scrape", return_value=[]),
+            patch("main.send_email") as send_email,
+            patch("main.read_hashes") as read_hashes,
+            patch("main.write_hashes") as write_hashes,
+        ):
+            run_user(config, config.users[0])
+
+        send_email.assert_called_once()
+        self.assertIn("No matching appointments found.", send_email.call_args.args[0])
+        self.assertEqual(send_email.call_args.args[1].name, "Ana")
+        read_hashes.assert_not_called()
+        write_hashes.assert_not_called()
+        self.assertEqual(self.hash_path.read_bytes(), hash_before)
 
     def test_adds_user_and_preserves_other_config(self) -> None:
         response = self.client.post("/users/new", data=self.valid_form())
@@ -224,8 +253,9 @@ class WebAppTest(unittest.TestCase):
         app = create_app(self.config_path, {"TESTING": True, "SECRET_KEY": "test-secret"})
         response = app.test_client().post("/users/new", data={})
         self.assertEqual(response.status_code, 400)
-        run_response = app.test_client().post("/run")
+        run_response = app.test_client().post("/users/0/run")
         self.assertEqual(run_response.status_code, 400)
+        self.assertEqual(app.test_client().post("/run").status_code, 404)
 
 
 if __name__ == "__main__":

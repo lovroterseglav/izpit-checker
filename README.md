@@ -130,10 +130,14 @@ For cron, use an absolute path:
 ## Web interface for users
 
 The private Slovenian web interface can add, edit, and delete entries in the
-`users` section of `config.json`, and can manually run the normal appointment
-check. A manual check sends notifications only when results changed and uses a
-shared lock so it cannot overlap a cron-triggered check. It does not expose
-scraper settings, email settings, hashes, or scheduling.
+`users` section of `config.json`. Each user has a manual send action that
+scrapes only the pages required for that user and always emails the current
+results, including an empty result. Manual sends do not read or update
+`hash.json`.
+
+The CLI remains the hash-aware path for scheduled runs. Web and CLI runs are
+independent and may overlap; the web interface does not expose scraper
+settings, email settings, hashes, or scheduling.
 
 Install the dependencies and create a long random secret:
 
