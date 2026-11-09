@@ -153,6 +153,17 @@ Run it directly with Python:
 python3 web.py
 ```
 
+For local development with automatic reload, create `config.json` and run:
+
+```bash
+cp config.json.template config.json
+./dev.sh
+```
+
+The script uses the active virtual environment, `.venv`, or `venv`, in that
+order. Override the defaults with `DEV_HOST`, `PORT`, or
+`IZPIT_ALERT_CONFIG` as needed.
+
 The server listens on `127.0.0.1:8000`. To use another config file, set
 `IZPIT_ALERT_CONFIG=/absolute/path/to/config.json`. To use another port, set
 `PORT`.
