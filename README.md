@@ -160,6 +160,17 @@ cp config.json.template config.json
 ./dev.sh
 ```
 
+If `.env` exists, the script loads it before applying development defaults.
+For example:
+
+```dotenv
+IZPIT_ALERT_CONFIG=/absolute/path/to/config.json
+IZPIT_ALERT_WEB_SECRET=development-secret
+RS_API_KEY=your-resend-api-key
+PORT=8000
+DEV_HOST=127.0.0.1
+```
+
 The script uses the active virtual environment, `.venv`, or `venv`, in that
 order. Override the defaults with `DEV_HOST`, `PORT`, or
 `IZPIT_ALERT_CONFIG` as needed.

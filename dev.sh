@@ -17,6 +17,16 @@ else
 fi
 readonly python_bin
 
+if [[ -f "${repo_dir}/.env" && "${IZPIT_ALERT_DOTENV_LOADED:-}" != "1" ]]; then
+    if ! "${python_bin}" -c "import dotenv" 2>/dev/null; then
+        echo "python-dotenv is required to read .env." >&2
+        echo "Install dependencies with: ${python_bin} -m pip install -r requirements.txt" >&2
+        exit 1
+    fi
+    exec "${python_bin}" -m dotenv -f "${repo_dir}/.env" run --no-override -- \
+        env IZPIT_ALERT_DOTENV_LOADED=1 "${repo_dir}/dev.sh"
+fi
+
 export IZPIT_ALERT_CONFIG="${IZPIT_ALERT_CONFIG:-${repo_dir}/config.json}"
 export IZPIT_ALERT_WEB_SECRET="${IZPIT_ALERT_WEB_SECRET:-development-only-secret}"
 readonly dev_host="${DEV_HOST:-127.0.0.1}"
