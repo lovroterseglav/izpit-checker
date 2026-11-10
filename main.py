@@ -21,7 +21,7 @@ import time
 from bs4 import BeautifulSoup
 from collections import defaultdict
 from dataclasses import dataclass
-from html import escape
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urlencode, urlparse
@@ -38,6 +38,10 @@ RESEND_API_KEY_ENV = "RS_API_KEY"
 DEFAULT_EMAIL_SUBJECT = "Prosti termini za vozniški izpit"
 LEGACY_EMAIL_SUBJECT = "Updates for driving dates"
 logger = logging.getLogger(__name__)
+email_templates = Environment(
+    loader=FileSystemLoader(Path(__file__).with_name("templates")),
+    autoescape=select_autoescape(("html", "xml")),
+)
 
 
 @dataclass(frozen=True)
@@ -385,64 +389,11 @@ def format_pretty_summary(payload: dict[str, Any], user: UserConfig) -> str:
 
 
 def format_html_summary(payload: dict[str, Any], user: UserConfig) -> str:
-    result = payload.get("result", {})
-    filters = format_filters(user)
-    filter_rows = "".join(
-        f'<span style="display:inline-block;margin:0 6px 8px 0;padding:6px 10px;'
-        f'border-radius:999px;background:#eef2ff;color:#344054;font-size:13px;">{escape(value)}</span>'
-        for value in filters
+    return email_templates.get_template("email_summary.html").render(
+        user=user,
+        filters=format_filters(user),
+        result=payload.get("result", {}),
     )
-
-    if result:
-        appointment_rows = "".join(
-            '<tr>'
-            f'<td style="padding:14px 16px;border-bottom:1px solid #e4e7ec;font-weight:700;'
-            f'white-space:nowrap;color:#14213d;">{escape(date)}</td>'
-            f'<td style="padding:14px 16px;border-bottom:1px solid #e4e7ec;color:#344054;">'
-            f'{escape(", ".join(cities))}</td>'
-            '</tr>'
-            for date, cities in result.items()
-        )
-        results_html = (
-            f'<p style="margin:0 0 12px;color:#344054;">Število datumov s prostimi termini: '
-            f'<strong>{len(result)}</strong></p>'
-            '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
-            'style="border:1px solid #e4e7ec;border-radius:12px;border-collapse:separate;'
-            f'border-spacing:0;overflow:hidden;">{appointment_rows}</table>'
-        )
-    else:
-        results_html = (
-            '<div style="padding:18px;border-radius:12px;background:#f8fafc;border:1px solid #e4e7ec;">'
-            '<p style="margin:0;color:#475467;">Trenutno ni najdenih prostih terminov, ki ustrezajo '
-            'izbranim filtrom.</p></div>'
-        )
-
-    return f"""<!doctype html>
-<html lang="sl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f5f7fb;font-family:Arial,sans-serif;color:#172033;">
-  <div style="display:none;max-height:0;overflow:hidden;">Pregled prostih terminov za vozniški izpit.</div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f7fb;">
-    <tr><td align="center" style="padding:32px 16px;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;">
-        <tr><td style="padding:24px 28px;background:#14213d;border-radius:16px 16px 0 0;color:#fff;">
-          <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1;">Izpit Alert</div>
-          <h1 style="margin:8px 0 0;font-size:25px;line-height:1.25;">Prosti termini za vozniški izpit</h1>
-        </td></tr>
-        <tr><td style="padding:28px;background:#fff;border:1px solid #e4e7ec;border-top:0;border-radius:0 0 16px 16px;">
-          <p style="margin:0 0 20px;font-size:16px;">Pozdravljeni, <strong>{escape(user.name)}</strong>!</p>
-          <p style="margin:0 0 10px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#667085;">Izbrani filtri</p>
-          <div style="margin-bottom:20px;">{filter_rows}</div>
-          {results_html}
-          <p style="margin:24px 0 0;padding-top:18px;border-top:1px solid #e4e7ec;font-size:12px;line-height:1.5;color:#667085;">
-            To je samodejno obvestilo storitve Izpit Alert.
-          </p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>"""
 
 
 def require_env_var(name: str) -> str:
